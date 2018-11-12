@@ -18,10 +18,15 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import getpass
+import http
+
+import httplib2
+import json
 import logging
 import multiprocessing
 import os
 import psutil
+import requests
 import signal
 import six
 import socket
@@ -42,7 +47,7 @@ from airflow import configuration as conf
 from airflow import executors, models, settings
 from airflow.exceptions import AirflowException
 from airflow.logging_config import configure_logging
-from airflow.models import DAG, DagRun
+from airflow.models import DAG, DagRun, Marquez
 from airflow.settings import Stats
 from airflow.task_runner import get_task_runner
 from airflow.ti_deps.dep_context import DepContext, QUEUE_DEPS, RUN_DEPS
@@ -159,6 +164,8 @@ class BaseJob(Base, LoggingMixin):
         session.close()
 
         if job.state == State.SHUTDOWN:
+            if Marquez.is_enabled():
+                Marquez.get_instance().update_job_run_state(self.id, State.SHUTDOWN)
             self.kill()
 
         # Figure out how long to sleep for
@@ -917,6 +924,8 @@ class SchedulerJob(BaseJob):
             if run.state == State.RUNNING:
                 make_transient(run)
                 active_dag_runs.append(run)
+                if Marquez.is_enabled():
+                    Marquez.get_instance().update_job_run_state(run.run_id, State.RUNNING)
 
         for run in active_dag_runs:
             self.log.debug("Examining active DAG run: %s", run)
